@@ -1,96 +1,629 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Alerts</title>
-  <link rel="manifest" href="manifest.json">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EduScan Admin">
+<title>EduScan PH — Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #273449;
+    --border: #334155;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --purple: #a78bfa;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── CONFIG SCREEN ── */
+  #config-screen {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    gap: 12px;
+  }
+  #config-screen h1 { font-size: 20px; font-weight: 700; color: var(--accent); }
+  #config-screen p { color: var(--muted); font-size: 13px; text-align: center; max-width: 320px; }
+  .config-field { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 6px; }
+  .config-field label { font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+  .config-field input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    padding: 10px 12px;
+    width: 100%;
+    outline: none;
+  }
+  .config-field input:focus { border-color: var(--accent); }
+  #connect-btn {
+    width: 100%; max-width: 360px;
+    background: var(--accent);
+    color: #0f172a;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 12px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  #connect-btn:hover { opacity: 0.9; }
+  #config-error { color: var(--red); font-size: 12px; text-align: center; display: none; }
+
+  /* ── MAIN DASHBOARD ── */
+  #dashboard { display: none; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .header-left { display: flex; flex-direction: column; gap: 2px; }
+  .header-left span:first-child { font-size: 15px; font-weight: 700; color: var(--accent); }
+  .header-left span:last-child { font-size: 11px; color: var(--muted); }
+
+  #notif-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #notif-btn.enabled { border-color: var(--green); color: var(--green); }
+  #notif-btn.enabled .dot { background: var(--green); }
+  #notif-btn .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  main { padding: 16px; display: flex; flex-direction: column; gap: 16px; max-width: 480px; margin: 0 auto; }
+
+  /* ── STATS ROW ── */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .stat-card .stat-label { font-size: 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-card .stat-value { font-size: 24px; font-weight: 800; line-height: 1; }
+  .stat-card.total .stat-value { color: var(--accent); }
+  .stat-card.today .stat-value { color: var(--green); }
+  .stat-card.trial .stat-value { color: var(--amber); }
+
+  /* ── STATUS BAR ── */
+  .status-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .status-left { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .pulse {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+  #refresh-btn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 8px;
+  }
+  #refresh-btn:hover { opacity: 0.8; }
+
+  /* ── ACTIVITY FEED ── */
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 2px;
+  }
+
+  #activity-feed { display: flex; flex-direction: column; gap: 8px; }
+
+  .activity-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .activity-item.new-signup { border-left: 3px solid var(--green); }
+  .activity-item.lifetime { border-left: 3px solid var(--purple); }
+  .activity-item.expired { border-left: 3px solid var(--red); }
+
+  .activity-icon {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .activity-icon.signup { background: rgba(52,211,153,0.12); }
+  .activity-icon.lifetime { background: rgba(167,139,250,0.12); }
+  .activity-icon.expired { background: rgba(248,113,113,0.12); }
+
+  .activity-info { flex: 1; min-width: 0; }
+  .activity-info .name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .activity-info .email { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .activity-info .type { font-size: 11px; font-weight: 600; margin-top: 2px; }
+  .activity-info .type.signup { color: var(--green); }
+  .activity-info .type.lifetime { color: var(--purple); }
+  .activity-info .type.expired { color: var(--red); }
+
+  .activity-time { font-size: 11px; color: var(--muted); flex-shrink: 0; text-align: right; }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .empty-state .emoji { font-size: 32px; margin-bottom: 8px; }
+
+  #loading-state {
+    text-align: center;
+    padding: 32px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: transform 0.3s ease;
+    z-index: 999;
+    white-space: nowrap;
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.ok { border-color: var(--green); color: var(--green); }
+  #toast.err { border-color: var(--red); color: var(--red); }
+  #toast.info { border-color: var(--accent); color: var(--accent); }
+
+  .reset-link { font-size: 11px; color: var(--muted); text-align: center; cursor: pointer; text-decoration: underline; margin-top: 8px; }
+</style>
 </head>
 <body>
-  <h2>🔔 New User Notifications</h2>
-  <button id="subscribe-btn" disabled>Enable Push Notifications</button>
-  <p id="status"></p>
 
-  <script>
-    // ========== REPLACE THESE ==========
-    const SUPABASE_URL = 'https://sbltuuhwcdsooitnbxgo.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibHR1dWh3Y2Rzb29pdG5ieGdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMzI1NjgsImV4cCI6MjA5NzYwODU2OH0.hmA5C3GWFMr0RpHnJ7M2nDlYBM80mQMPZhG6Xt7spQE';
-    const VAPID_PUBLIC_KEY = 'BOGiogm71Mr12zZiz6TfggBBkKUQLqMCz8Yt-Cg8luwBzmm5W4GIwehhMLtmsUcdr0lcHiScArsgI8S14Dgn6PU';
-    // ===================================
+<!-- CONFIG SCREEN -->
+<div id="config-screen">
+  <span style="font-size:32px;">📋</span>
+  <h1>EduScan PH Admin</h1>
+  <p>Enter your Supabase credentials to connect. These are saved only on this device.</p>
 
-    const btn = document.getElementById('subscribe-btn');
-    const status = document.getElementById('status');
+  <div class="config-field">
+    <label>Supabase URL</label>
+    <input type="text" id="sb-url" placeholder="https://xxxx.supabase.co">
+  </div>
+  <div class="config-field">
+    <label>Supabase Anon Key</label>
+    <input type="text" id="sb-key" placeholder="eyJhbGci...">
+  </div>
+  <div id="config-error">Could not connect. Check your credentials.</div>
+  <button id="connect-btn" onclick="connectSupabase()">Connect</button>
+  <p style="font-size:11px;">Credentials are stored in localStorage on this device only.</p>
+</div>
 
-    function urlBase64ToUint8Array(base64String) {
-      // Replace URL-safe characters
-      let base64 = base64String.replace(/-/g, '+').replace(/_/g, '/');
-      // Add padding if necessary
-      while (base64.length % 4) {
-        base64 += '=';
-      }
-      // Decode
-      const rawData = atob(base64);
-      const outputArray = new Uint8Array(rawData.length);
-      for (let i = 0; i < rawData.length; ++i) {
-        outputArray[i] = rawData.charCodeAt(i);
-      }
-      return outputArray;
+<!-- MAIN DASHBOARD -->
+<div id="dashboard">
+  <header>
+    <div class="header-left">
+      <span>EduScan PH Admin</span>
+      <span id="last-checked">Checking...</span>
+    </div>
+    <button id="notif-btn" onclick="toggleNotifications()">
+      <span class="dot"></span>
+      <span id="notif-label">Enable Alerts</span>
+    </button>
+  </header>
+
+  <main>
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card total">
+        <span class="stat-label">Total</span>
+        <span class="stat-value" id="stat-total">—</span>
+      </div>
+      <div class="stat-card today">
+        <span class="stat-label">Today</span>
+        <span class="stat-value" id="stat-today">—</span>
+      </div>
+      <div class="stat-card trial">
+        <span class="stat-label">Lifetime</span>
+        <span class="stat-value" id="stat-lifetime">—</span>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <div class="status-left">
+        <div class="pulse"></div>
+        <span id="status-text">Polling every 1 min</span>
+      </div>
+      <button id="refresh-btn" onclick="manualRefresh()">↻ Refresh</button>
+    </div>
+
+    <!-- Activity Feed -->
+    <div>
+      <div class="section-title">Recent Activity</div>
+      <div id="loading-state">
+        <div class="spinner"></div>
+        Loading users...
+      </div>
+      <div id="activity-feed" style="display:none;"></div>
+    </div>
+  </main>
+
+  <div style="text-align:center; padding: 8px 0 24px;">
+    <span class="reset-link" onclick="resetCredentials()">Disconnect & reset</span>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- SERVICE WORKER REGISTRATION -->
+<script>
+// ══════════════════════════════════════════
+// CONFIG & STATE
+// ══════════════════════════════════════════
+let supabaseClient = null;
+let pollInterval = null;
+let knownUserIds = new Set();
+let isFirstLoad = true;
+
+const POLL_MS = 60_000; // 1 minute
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  if (url && key) {
+    initDashboard(url, key);
+  }
+
+  // Register service worker for push
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('#', { scope: '/' }).catch(() => {});
+  }
+
+  // Check if notifications already enabled
+  if (Notification.permission === 'granted') {
+    setNotifEnabled(true);
+  }
+});
+
+// ══════════════════════════════════════════
+// CONNECT SUPABASE
+// ══════════════════════════════════════════
+async function connectSupabase() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  const errEl = document.getElementById('config-error');
+  const btn = document.getElementById('connect-btn');
+
+  if (!url || !key) { errEl.style.display = 'block'; errEl.textContent = 'Both fields are required.'; return; }
+
+  btn.textContent = 'Connecting...';
+  btn.disabled = true;
+  errEl.style.display = 'none';
+
+  try {
+    const client = supabase.createClient(url, key);
+    // Test connection
+    const { error } = await client.from('profiles').select('id').limit(1);
+    if (error && error.code !== 'PGRST116') throw error;
+
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    initDashboard(url, key);
+  } catch (e) {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Could not connect. Check your credentials.';
+    btn.textContent = 'Connect';
+    btn.disabled = false;
+  }
+}
+
+function initDashboard(url, key) {
+  supabaseClient = supabase.createClient(url, key);
+  document.getElementById('config-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  fetchUsers();
+  pollInterval = setInterval(fetchUsers, POLL_MS);
+}
+
+// ══════════════════════════════════════════
+// FETCH USERS
+// ══════════════════════════════════════════
+async function fetchUsers() {
+  try {
+    // Fetch from profiles table — adjust column names to match yours
+    const { data: profiles, error } = await supabaseClient
+      .from('profiles')
+      .select('id, full_name, email, access_tier, created_at')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+
+    updateStats(profiles);
+    updateFeed(profiles);
+    checkForNewActivity(profiles);
+    updateLastChecked();
+
+  } catch (e) {
+    console.error('Fetch error:', e);
+    updateLastChecked(true);
+  }
+}
+
+function updateStats(profiles) {
+  const total = profiles.length;
+  const today = profiles.filter(p => {
+    const d = new Date(p.created_at);
+    const now = new Date();
+    return d.toDateString() === now.toDateString();
+  }).length;
+  const lifetime = profiles.filter(p => p.access_tier === 'lifetime').length;
+
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-today').textContent = today;
+  document.getElementById('stat-lifetime').textContent = lifetime;
+}
+
+function updateFeed(profiles) {
+  const feed = document.getElementById('activity-feed');
+  const loading = document.getElementById('loading-state');
+  loading.style.display = 'none';
+  feed.style.display = 'flex';
+
+  if (!profiles.length) {
+    feed.innerHTML = `<div class="empty-state"><div class="emoji">📭</div>No users yet. Share your app!</div>`;
+    return;
+  }
+
+  feed.innerHTML = profiles.map(p => {
+    const tier = p.access_tier || 'trial';
+    const isLifetime = tier === 'lifetime';
+    const isExpired = isExpiredTrial(p.created_at);
+    const typeClass = isLifetime ? 'lifetime' : isExpired ? 'expired' : 'signup';
+    const typeLabel = isLifetime ? '👑 Lifetime' : isExpired ? '⏰ Trial Expired' : '🆕 Trial User';
+    const iconEmoji = isLifetime ? '👑' : isExpired ? '⏰' : '🧑‍🏫';
+    const itemClass = isLifetime ? 'lifetime' : isExpired ? 'expired' : 'new-signup';
+    const name = p.full_name || 'Unknown';
+    const email = p.email || '—';
+    const time = timeAgo(p.created_at);
+
+    return `<div class="activity-item ${itemClass}">
+      <div class="activity-icon ${typeClass}">${iconEmoji}</div>
+      <div class="activity-info">
+        <div class="name">${name}</div>
+        <div class="email">${email}</div>
+        <div class="type ${typeClass}">${typeLabel}</div>
+      </div>
+      <div class="activity-time">${time}</div>
+    </div>`;
+  }).join('');
+}
+
+function isExpiredTrial(createdAt) {
+  const TRIAL_DAYS = 7;
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diff = (now - created) / (1000 * 60 * 60 * 24);
+  return diff >= TRIAL_DAYS;
+}
+
+// ══════════════════════════════════════════
+// DETECT NEW ACTIVITY & NOTIFY
+// ══════════════════════════════════════════
+function checkForNewActivity(profiles) {
+  if (isFirstLoad) {
+    // On first load, just seed the known IDs — don't notify
+    profiles.forEach(p => knownUserIds.add(p.id));
+    isFirstLoad = false;
+    return;
+  }
+
+  const newUsers = profiles.filter(p => !knownUserIds.has(p.id));
+  newUsers.forEach(p => {
+    knownUserIds.add(p.id);
+    const name = p.full_name || p.email || 'Someone';
+    const tier = p.access_tier === 'lifetime' ? 'just upgraded to Lifetime! 👑' : 'just signed up! 🆕';
+    sendPushNotification(`EduScan PH — New Activity`, `${name} ${tier}`);
+    showToast(`${name} ${tier}`, 'ok');
+  });
+
+  // Also notify lifetime upgrades on existing users
+  profiles.forEach(p => {
+    const cachedTier = window._tierCache?.[p.id];
+    if (cachedTier && cachedTier !== 'lifetime' && p.access_tier === 'lifetime') {
+      const name = p.full_name || p.email || 'A user';
+      sendPushNotification(`💰 New Sale!`, `${name} upgraded to Lifetime Access!`);
+      showToast(`💰 ${name} upgraded to Lifetime!`, 'ok');
     }
+  });
 
-    async function subscribeUser(registration) {
-      try {
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-        });
+  // Cache tiers for next comparison
+  window._tierCache = {};
+  profiles.forEach(p => { window._tierCache[p.id] = p.access_tier; });
+}
 
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_push_subscriptions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({ subscription }),
-        });
+// ══════════════════════════════════════════
+// PUSH NOTIFICATIONS
+// ══════════════════════════════════════════
+async function toggleNotifications() {
+  if (Notification.permission === 'granted') {
+    setNotifEnabled(false);
+    Notification.permission !== 'denied' && showToast('Alerts disabled', 'info');
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  if (permission === 'granted') {
+    setNotifEnabled(true);
+    showToast('Alerts enabled! You will be notified of new signups.', 'ok');
+    // Test notification
+    setTimeout(() => {
+      sendPushNotification('EduScan PH Admin', 'Notifications are working! 🎉');
+    }, 1000);
+  } else {
+    showToast('Permission denied. Enable in browser settings.', 'err');
+  }
+}
 
-        if (res.ok) {
-          status.textContent = '✅ Subscribed! You will receive notifications.';
-          btn.disabled = true;
-        } else {
-          throw new Error('Failed to store subscription');
-        }
-      } catch (err) {
-        status.textContent = '❌ Subscription failed: ' + err.message;
-        console.error(err);
-      }
-    }
+function setNotifEnabled(enabled) {
+  const btn = document.getElementById('notif-btn');
+  const label = document.getElementById('notif-label');
+  const dot = btn.querySelector('.dot');
+  if (enabled) {
+    btn.classList.add('enabled');
+    label.textContent = 'Alerts ON';
+  } else {
+    btn.classList.remove('enabled');
+    label.textContent = 'Enable Alerts';
+  }
+}
 
-    (async () => {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        status.textContent = 'Push not supported on this device/browser.';
-        return;
-      }
+function sendPushNotification(title, body) {
+  if (Notification.permission !== 'granted') return;
+  try {
+    new Notification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [200, 100, 200],
+      tag: 'eduscan-admin',
+      renotify: true,
+    });
+  } catch (e) {
+    console.error('Notification error:', e);
+  }
+}
 
-      const reg = await navigator.serviceWorker.register('service-worker.js');
-      const existing = await reg.pushManager.getSubscription();
+// ══════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════
+function updateLastChecked(isError = false) {
+  const el = document.getElementById('last-checked');
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
+  el.textContent = isError ? `Error at ${time}` : `Updated ${time}`;
+}
 
-      if (existing) {
-        status.textContent = 'Already subscribed.';
-        btn.disabled = true;
-      } else {
-        btn.disabled = false;
-      }
+function manualRefresh() {
+  document.getElementById('refresh-btn').textContent = '↻ ...';
+  fetchUsers().then(() => {
+    document.getElementById('refresh-btn').textContent = '↻ Refresh';
+    showToast('Refreshed!', 'ok');
+  });
+}
 
-      btn.addEventListener('click', async () => {
-        const perm = await Notification.requestPermission();
-        if (perm === 'granted') {
-          subscribeUser(reg);
-        } else {
-          status.textContent = 'Permission denied.';
-        }
-      });
-    })();
-  </script>
+function timeAgo(dateStr) {
+  const now = new Date();
+  const then = new Date(dateStr);
+  const diff = Math.floor((now - then) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  return `${Math.floor(diff/86400)}d ago`;
+}
+
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => t.className = '', 3500);
+}
+
+function resetCredentials() {
+  if (!confirm('Disconnect from Supabase?')) return;
+  localStorage.removeItem('sb_url');
+  localStorage.removeItem('sb_key');
+  clearInterval(pollInterval);
+  location.reload();
+}
+</script>
 </body>
 </html>
