@@ -467,5 +467,16 @@ function resetCredentials() {
   location.reload();
 }
 </script>
+
+<script>
+// Register Service Worker for background push
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('[Admin] SW registered:', reg.scope))
+      .catch(err => console.error('[Admin] SW failed:', err));
+  });
+}
+</script>
 </body>
 </html>
