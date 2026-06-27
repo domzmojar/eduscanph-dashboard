@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Alerts</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <h2>🔔 New User Notifications</h2>
+  <button id="subscribe-btn" disabled>Enable Push Notifications</button>
+  <p id="status"></p>
+
+  <script>
+    // ========== REPLACE THESE ==========
+    const SUPABASE_URL = 'https://your-project-id.supabase.co';
+    const SUPABASE_ANON_KEY = 'your-anon-key';
+    const VAPID_PUBLIC_KEY = 'YOUR_PUBLIC_VAPID_KEY';
+    // ===================================
+
+    const btn = document.getElementById('subscribe-btn');
+    const status = document.getElementById('status');
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
+    async function subscribeUser(registration) {
+      try {
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/admin_push_subscriptions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ subscription }),
+        });
+
+        if (res.ok) {
+          status.textContent = '✅ Subscribed! You will receive notifications.';
+          btn.disabled = true;
+        } else {
+          throw new Error('Failed to store subscription');
+        }
+      } catch (err) {
+        status.textContent = '❌ Subscription failed: ' + err.message;
+        console.error(err);
+      }
+    }
+
+    (async () => {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        status.textContent = 'Push not supported on this device/browser.';
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.register('service-worker.js');
+      const existing = await reg.pushManager.getSubscription();
+
+      if (existing) {
+        status.textContent = 'Already subscribed.';
+        btn.disabled = true;
+      } else {
+        btn.disabled = false;
+      }
+
+      btn.addEventListener('click', async () => {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          subscribeUser(reg);
+        } else {
+          status.textContent = 'Permission denied.';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
