@@ -13,18 +13,23 @@
 
   <script>
     // ========== REPLACE THESE ==========
-    const SUPABASE_URL = 'https://your-project-id.supabase.co';
-    const SUPABASE_ANON_KEY = 'your-anon-key';
-    const VAPID_PUBLIC_KEY = 'YOUR_PUBLIC_VAPID_KEY';
+    const SUPABASE_URL = 'https://sbltuuhwcdsooitnbxgo.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibHR1dWh3Y2Rzb29pdG5ieGdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMzI1NjgsImV4cCI6MjA5NzYwODU2OH0.hmA5C3GWFMr0RpHnJ7M2nDlYBM80mQMPZhG6Xt7spQE';
+    const VAPID_PUBLIC_KEY = 'BOGiogm71Mr12zZiz6TfggBBkKUQLqMCz8Yt-Cg8luwBzmm5W4GIwehhMLtmsUcdr0lcHiScArsgI8S14Dgn6PU';
     // ===================================
 
     const btn = document.getElementById('subscribe-btn');
     const status = document.getElementById('status');
 
     function urlBase64ToUint8Array(base64String) {
-      const padding = '='.repeat((4 - base64String.length % 4) % 4);
-      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-      const rawData = window.atob(base64);
+      // Replace URL-safe characters
+      let base64 = base64String.replace(/-/g, '+').replace(/_/g, '/');
+      // Add padding if necessary
+      while (base64.length % 4) {
+        base64 += '=';
+      }
+      // Decode
+      const rawData = atob(base64);
       const outputArray = new Uint8Array(rawData.length);
       for (let i = 0; i < rawData.length; ++i) {
         outputArray[i] = rawData.charCodeAt(i);
